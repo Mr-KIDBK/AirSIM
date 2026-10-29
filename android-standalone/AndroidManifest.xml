@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.airsim.phonecontrol.standalone"
     android:versionCode="123"
-    android:versionName="0.9.8.18">
+    android:versionName="0.9.8.18-selfheal.3">
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
     </queries>
