@@ -46,6 +46,10 @@ assert_contains "$M" 'CloudCallRetryPolicy.mediaOutcome(error, CallRepository.st
   'a media session must stop once the Relay no longer has its call'
 assert_contains "$M" 'outcome == CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE && active == this' \
   'a live Telecom call keeps its slot after media give-up, so its retried ring cannot push the iPhone again'
+assert_contains "$M" '"standalone_cloud_call_closed_unconfirmed call_uuid="' \
+  'closing a call whose "ended" was dropped must log which cloud call it was'
+assert_contains "$M" '"standalone_cloud_media_abandoned call_uuid="' \
+  'abandoning a media session must log which cloud call it was'
 assert_contains "$M" 'void abandonCallEvent(String encoded)' \
   'media manager must close a call whose "ended" was dropped'
 assert_contains "$M" 'active != null && CloudCallTarget.owns(active.descriptor.androidID, androidID)' \

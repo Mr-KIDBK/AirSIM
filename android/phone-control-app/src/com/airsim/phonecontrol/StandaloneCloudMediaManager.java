@@ -203,9 +203,10 @@ final class StandaloneCloudMediaManager implements Closeable {
         String androidID = event.optString("call_id", "");
         synchronized (lock) {
             if (active != null && CloudCallTarget.owns(active.descriptor.androidID, androidID)) {
+                BridgeLog.info("standalone_cloud_call_closed_unconfirmed call_uuid="
+                        + DebugRedactor.safeIdentifier(active.descriptor.callUUID));
                 active.close();
                 active = null;
-                BridgeLog.info("standalone_cloud_call_closed_unconfirmed");
             }
         }
     }
@@ -260,7 +261,8 @@ final class StandaloneCloudMediaManager implements Closeable {
                         if (outcome != CloudCallRetryPolicy.MediaOutcome.RECONNECT) {
                             // Relay no longer has this call (ended, expired or never stored),
                             // so every reconnect with this secret would be refused again.
-                            BridgeLog.info("standalone_cloud_media_abandoned " + CloudCallRetryPolicy.describe(error));
+                            BridgeLog.info("standalone_cloud_media_abandoned call_uuid="
+                                    + DebugRedactor.safeIdentifier(descriptor.callUUID) + " " + CloudCallRetryPolicy.describe(error));
                             synchronized (lock) {
                                 if (outcome == CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE && active == this) active = null;
                             }
