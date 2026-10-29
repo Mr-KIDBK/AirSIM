@@ -68,9 +68,10 @@ adb shell dumpsys activity service com.airsim.phonecontrol.standalone/com.airsim
 - Relay 返回 4xx（401、408、429 除外）表示它不会接受这条事件（通话已结束或过期、生命周期顺序不合法等），立即丢弃，继续处理后面的事件。
 - 断网、超时、5xx、401、408、429 继续重试，但同一条事件最多占住队首 60 秒，之后丢弃，避免挡住后面的挂断和下一通电话。
 - 被丢弃的是「挂断」时，仍会关闭同一通 Android 通话对应的云端媒体会话（按 Android 通话 ID 匹配，不会关掉另一通）。
-- 云端媒体会话重连时，Relay 用 4xx（408、429 除外，含 401、410）拒绝握手，说明这通电话已不在 Relay 上，停止重连。
+- 云端会话只接受它自己那通 Android 电话的事件。呼叫等待中的第二通电话、或上一通电话迟到的事件，只记日志，不提交给 Relay，也不会结束当前通话。
+- 云端媒体会话重连时，Relay 用 4xx（408、429 除外，含 401、410）拒绝握手，说明这通电话已不在 Relay 上，停止重连。这通 Android 电话还在时保留会话位置，避免重试中的来电再次推送 iPhone；电话结束后释放。
 
-日志事件：`standalone_call_event_retry`、`standalone_call_event_dropped`、`standalone_cloud_call_closed_unconfirmed`、`standalone_cloud_media_abandoned`。重试、丢弃和放弃带异常类型、HTTP 状态和 Relay 返回的原因（只保留字母，不含号码等数字）。
+日志事件：`standalone_call_event_retry`、`standalone_call_event_dropped`、`standalone_call_event_other_call`、`standalone_cloud_call_closed_unconfirmed`、`standalone_cloud_media_abandoned`。重试、丢弃和放弃带异常类型、HTTP 状态和 Relay 返回的原因（只保留字母，不含号码等数字）。
 
 ## 运行架构
 
