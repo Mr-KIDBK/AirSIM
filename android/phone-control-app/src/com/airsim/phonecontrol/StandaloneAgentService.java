@@ -38,6 +38,7 @@ public final class StandaloneAgentService extends Service {
     private StandaloneRelayClient relay;
     private int syncedRegistrationHash;
     private final RelayRegistrationRecovery registrationRecovery = new RelayRegistrationRecovery();
+    private final CloudCallRetryPolicy callEventRetry = new CloudCallRetryPolicy();
     private long lastHeartbeat;
     private long nextHeartbeatAttempt;
     private long lastCommandPoll;
@@ -327,8 +328,16 @@ public final class StandaloneAgentService extends Service {
                             registration, new JSONObject(encoded), relay);
                     CALL_EVENTS.poll();
                 } catch (Exception error) {
+                    if (callEventRetry.shouldDrop(encoded, error, android.os.SystemClock.elapsedRealtime())) {
+                        // A refused or long-failing event must not hold every later event,
+                        // including the "ended" that closes the cloud call, behind it.
+                        CALL_EVENTS.poll();
+                        BridgeLog.info("standalone_call_event_dropped " + CloudCallRetryPolicy.describe(error));
+                        StandaloneCloudMediaManager.get(this).abandonCallEvent(encoded);
+                        continue;
+                    }
                     BridgeLog.info("standalone_call_event_retry failures=" + (attempt + 1)
-                            + " type=" + error.getClass().getSimpleName());
+                            + " " + CloudCallRetryPolicy.describe(error));
                     try { Thread.sleep(500); } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
                         return;

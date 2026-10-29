@@ -186,6 +186,24 @@ final class StandaloneCloudMediaManager implements Closeable {
         }
     }
 
+    /**
+     * The Relay will never take this queued call event. When it was the carrier's "ended", still
+     * close the cloud call of that Android call, or its media session keeps reconnecting.
+     */
+    void abandonCallEvent(String encoded) {
+        JSONObject event;
+        try { event = new JSONObject(encoded); } catch (Exception ignored) { return; }
+        if (!"ended".equals(event.optString("state", ""))) return;
+        String androidID = event.optString("call_id", "");
+        synchronized (lock) {
+            if (active != null && !androidID.isEmpty() && androidID.equals(active.descriptor.androidID)) {
+                active.close();
+                active = null;
+                BridgeLog.info("standalone_cloud_call_closed_unconfirmed");
+            }
+        }
+    }
+
     private void closeActive(Descriptor descriptor) {
         synchronized (lock) {
             if (active != null && active.descriptor.same(descriptor)) {
@@ -232,6 +250,13 @@ final class StandaloneCloudMediaManager implements Closeable {
                         connected = false;
                         reconnectFailures = Math.min(4, reconnectFailures + 1);
                         BridgeLog.error("standalone_cloud_media_disconnected", error);
+                        if (CloudCallRetryPolicy.mediaRejected(error)) {
+                            // Relay no longer has this call (ended, expired or never stored),
+                            // so every reconnect with this secret would be refused again.
+                            BridgeLog.info("standalone_cloud_media_abandoned " + CloudCallRetryPolicy.describe(error));
+                            synchronized (lock) { if (active == this) active = null; }
+                            close();
+                        }
                     }
                 } finally {
                     closeSocket(owner);

@@ -35,6 +35,21 @@ assert_contains "$S" 'registrationRecovery.onAuthenticated()' \
   'successful heartbeat must reset recovery backoff'
 assert_contains "$S" '"simulate-unauthorized"' \
   'dumpsys hook for live verification is missing'
+assert_contains "$S" 'callEventRetry.shouldDrop(encoded, error, android.os.SystemClock.elapsedRealtime())' \
+  'a call event the Relay keeps refusing must leave the queue'
+assert_contains "$S" 'StandaloneCloudMediaManager.get(this).abandonCallEvent(encoded);' \
+  'a dropped "ended" must still close its cloud call'
+assert_contains "$S" '" " + CloudCallRetryPolicy.describe(error)' \
+  'call event retries must log the Relay status'
+M="$ROOT/../android/phone-control-app/src/com/airsim/phonecontrol/StandaloneCloudMediaManager.java"
+assert_contains "$M" 'if (CloudCallRetryPolicy.mediaRejected(error))' \
+  'a media session must stop once the Relay no longer has its call'
+assert_contains "$M" 'void abandonCallEvent(String encoded)' \
+  'media manager must close a call whose "ended" was dropped'
+assert_contains "$M" '!androidID.isEmpty() && androidID.equals(active.descriptor.androidID)' \
+  'a dropped "ended" may only close the cloud call of the same Android call'
+assert_contains "$M" 'try { event = new JSONObject(encoded); } catch (Exception ignored) { return; }' \
+  'an unparsable dropped event must not escape the event worker'
 
 assert_contains "$MANIFEST" 'package="com.airsim.phonecontrol.standalone"' \
   'standalone package id is missing'
