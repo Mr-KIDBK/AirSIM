@@ -205,9 +205,6 @@ public final class StandaloneAgentService extends Service {
                     if (!commandConfiguration.isCurrent(snapshot)) return;
                     result = StandaloneAgentGateway.get(this).executeCloudCommand(command,
                             () -> commandConfiguration.isCurrent(snapshot));
-                    if (result.optString("status").equals("completed") && "dial".equals(command.optString("type"))) {
-                        StandaloneCloudMediaManager.get(this).startOutgoing(command.optJSONObject("call"));
-                    }
                 }
             } catch (Exception error) {
                 result = new JSONObject().put("command_id", commandID).put("status", "failed")
@@ -266,10 +263,6 @@ public final class StandaloneAgentService extends Service {
                         if (!agentID(registration).equals(command.optString("target_agent_id"))) continue;
                         JSONObject result = StandaloneAgentGateway.get(this).executeCloudCommand(command,
                                 () -> commandConfiguration.isCurrent(commandSnapshot));
-                        if (result.optString("status").equals("completed")
-                                && "dial".equals(command.optString("type"))) {
-                            StandaloneCloudMediaManager.get(this).startOutgoing(command.optJSONObject("call"));
-                        }
                         socket.writeText(result.toString());
                     } catch (SocketTimeoutException timeout) {
                         socket.writePing("command-keepalive".getBytes(StandardCharsets.US_ASCII));

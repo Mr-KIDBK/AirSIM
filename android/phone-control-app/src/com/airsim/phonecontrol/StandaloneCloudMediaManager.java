@@ -42,10 +42,25 @@ final class StandaloneCloudMediaManager implements Closeable {
         this.context = context.getApplicationContext();
     }
 
-    void startOutgoing(JSONObject call) {
+    void startOutgoing(JSONObject call, java.util.Set<String> callsBeforeDial, String dialedNumber) {
         if (call == null) return;
-        try { start(Descriptor.from(call)); }
+        try {
+            Descriptor descriptor = Descriptor.from(call);
+            descriptor.callsBeforeDial = java.util.Set.copyOf(callsBeforeDial);
+            descriptor.dialedNumber = dialedNumber;
+            bindOutgoing(descriptor);
+            start(descriptor);
+        }
         catch (Exception error) { BridgeLog.error("standalone_outgoing_media_invalid", error); }
+    }
+
+    private void bindOutgoing(Descriptor descriptor) {
+        if (!descriptor.androidID.isEmpty() || !"outgoing".equals(descriptor.direction)
+                || descriptor.dialedNumber.isBlank()) return;
+        // Only a unique live Telecom call created by this dial can claim the descriptor.
+        // Queue order/direction alone is not proof: an old ended/active may arrive first.
+        String candidate = CallRepository.newOutgoingCallSince(descriptor.callsBeforeDial, descriptor.dialedNumber);
+        if (!candidate.isEmpty()) descriptor.androidID = candidate;
     }
 
     String androidCallIDFor(JSONObject call) {
@@ -87,9 +102,8 @@ final class StandaloneCloudMediaManager implements Closeable {
             // the priority retry path instead of blocking the agent loop for 15s.
             postRelay(registration, relay, "/v2/events/call", payload, 5_000);
             start(descriptor);
-        } else if (descriptor != null && descriptor.androidID.isEmpty()
-                && "outgoing".equals(direction)) {
-            descriptor.androidID = androidID;
+        } else if (descriptor != null && descriptor.androidID.isEmpty()) {
+            bindOutgoing(descriptor);
             synchronized (lock) {
                 if (active != null && active.descriptor == descriptor) {
                     synchronized (active) {
@@ -432,6 +446,8 @@ final class StandaloneCloudMediaManager implements Closeable {
         final String secret;
         final String relayURL;
         final String direction;
+        java.util.Set<String> callsBeforeDial = java.util.Set.of();
+        String dialedNumber = "";
         volatile String androidID;
 
         Descriptor(String callID, String callUUID, long generation, String secret,
