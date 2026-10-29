@@ -41,6 +41,8 @@ public final class CloudCallRetryPolicyTests {
         check(CloudCallRetryPolicy.mediaOutcome(http(401), 4) == stop, "final rejection of a live call stops but keeps the slot");
         check(CloudCallRetryPolicy.mediaOutcome(http(410), 2) == stop,
                 "a ringing call keeps its slot, so a retried ring cannot push the iPhone again");
+        // 0 is STATE_NEW: a call Telecom has created but not started dialing is still live.
+        check(CloudCallRetryPolicy.mediaOutcome(http(404), 0) == stop, "a call that has not dialed yet keeps its slot");
         check(CloudCallRetryPolicy.mediaOutcome(http(401), -1) == release, "final rejection after the call is gone releases the slot");
         check(CloudCallRetryPolicy.mediaOutcome(http(404), -1) == release, "404 after the call is gone releases the slot");
 
