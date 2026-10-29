@@ -30,21 +30,28 @@ final class CloudCallRetryPolicy {
         return error instanceof RelayHTTPException http && http.statusCode() != 401 && finalStatus(http.statusCode());
     }
 
-    /** The Relay no longer has this call, so the per-call media secret will be refused again. */
+    /** 401 is ambiguous with KV propagation; only other permanent rejections stop immediately. */
     static boolean mediaRejected(Throwable error) {
-        return error instanceof RelayHTTPException http && finalStatus(http.statusCode());
+        return error instanceof RelayHTTPException http && http.statusCode() != 401 && finalStatus(http.statusCode());
     }
 
     enum MediaOutcome { RECONNECT, STOP, STOP_AND_RELEASE }
 
-    /**
-     * What a cloud media session does after a failed connect. A final rejection stops it; its slot
-     * is released only once the Telecom call is gone ({@code telecomState < 0}), because while the
-     * call lives a retried ring of it must find this session instead of pushing the iPhone again.
-     */
-    static MediaOutcome mediaOutcome(Throwable error, int telecomState) {
-        if (!mediaRejected(error)) return MediaOutcome.RECONNECT;
-        return telecomState < 0 ? MediaOutcome.STOP_AND_RELEASE : MediaOutcome.STOP;
+    /** One per media session, never shared with another call or the event FIFO. */
+    static final class MediaRetry {
+        private long unauthorizedSince = -1;
+
+        void authenticated() { unauthorizedSince = -1; }
+
+        MediaOutcome outcome(Throwable error, int telecomState, long nowMillis) {
+            if (error instanceof RelayHTTPException http && http.statusCode() == 401
+                    && unauthorizedSince < 0) unauthorizedSince = nowMillis;
+            // Changing errors must not grant another window; only successful authentication can.
+            boolean exhausted = unauthorizedSince >= 0 && nowMillis - unauthorizedSince >= GIVE_UP_AFTER_MILLIS;
+            if (!mediaRejected(error) && !exhausted) return MediaOutcome.RECONNECT;
+            // Keep a live call's slot to prevent queued rings creating duplicate VoIP pushes.
+            return telecomState < 0 ? MediaOutcome.STOP_AND_RELEASE : MediaOutcome.STOP;
+        }
     }
 
     /** Log-safe: exception type, HTTP status and the Relay's short reason, never the body itself. */

@@ -12,6 +12,7 @@ public final class CloudCallRetryPolicyTests {
     private static RelayHTTPException http(int status, String body) { return new RelayHTTPException(status, body); }
 
     public static void main(String[] args) {
+        check(!CloudCallRetryPolicy.mediaRejected(http(401)), "initial media 401 may be temporary KV invisibility");
         for (int status : new int[]{400, 403, 404, 409, 410, 422}) {
             check(CloudCallRetryPolicy.eventRejected(http(status)), "call event " + status + " is final");
         }
@@ -21,11 +22,10 @@ public final class CloudCallRetryPolicyTests {
         check(!CloudCallRetryPolicy.eventRejected(new IOException("offline")), "network failure is retryable");
         check(!CloudCallRetryPolicy.eventRejected(new SocketTimeoutException("Read timed out")), "timeout is retryable");
         check(!CloudCallRetryPolicy.eventRejected(null), "missing error is retryable");
-        // The media handshake authenticates with the per-call secret, so 401 there means the call is gone.
-        for (int status : new int[]{400, 401, 404, 410, 426}) {
+        for (int status : new int[]{400, 404, 410, 426}) {
             check(CloudCallRetryPolicy.mediaRejected(http(status)), "media handshake " + status + " is final");
         }
-        for (int status : new int[]{408, 429, 500, 503}) {
+        for (int status : new int[]{401, 408, 429, 500, 503}) {
             check(!CloudCallRetryPolicy.mediaRejected(http(status)), "media handshake " + status + " is retryable");
         }
         check(!CloudCallRetryPolicy.mediaRejected(new IOException("reset")), "media network failure is retryable");
@@ -34,15 +34,24 @@ public final class CloudCallRetryPolicyTests {
         var stop = CloudCallRetryPolicy.MediaOutcome.STOP;
         var release = CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE;
         // Telecom states as Android numbers them: 2 ringing, 4 active; -1 means the call is gone.
-        check(CloudCallRetryPolicy.mediaOutcome(new IOException("reset"), 4) == reconnect, "network failure reconnects");
-        check(CloudCallRetryPolicy.mediaOutcome(http(500), -1) == reconnect, "5xx reconnects even after the call is gone");
-        check(CloudCallRetryPolicy.mediaOutcome(http(429), -1) == reconnect, "429 reconnects");
-        check(CloudCallRetryPolicy.mediaOutcome(null, -1) == reconnect, "missing error reconnects");
-        check(CloudCallRetryPolicy.mediaOutcome(http(401), 4) == stop, "final rejection of a live call stops but keeps the slot");
-        check(CloudCallRetryPolicy.mediaOutcome(http(410), 2) == stop,
+        var media = new CloudCallRetryPolicy.MediaRetry();
+        check(media.outcome(new IOException("reset"), 4, 0) == reconnect, "network failure reconnects");
+        check(media.outcome(http(500), -1, 0) == reconnect, "5xx reconnects even after the call is gone");
+        check(media.outcome(http(429), -1, 0) == reconnect, "429 reconnects");
+        check(media.outcome(null, -1, 0) == reconnect, "missing error reconnects");
+        check(media.outcome(http(401), 4, 0) == reconnect, "first 401 allows KV propagation");
+        check(media.outcome(http(401), 4, 59_999) == reconnect, "401 within window retries");
+        check(media.outcome(http(401), 4, 60_000) == stop, "expired 401 window stops but keeps live slot");
+        check(media.outcome(http(401), -1, 60_001) == release, "expired window releases departed call");
+        media.authenticated();
+        check(media.outcome(http(401), 4, 120_000) == reconnect, "successful handshake resets window");
+        check(media.outcome(http(500), 4, 179_999) == reconnect, "mixed failure retries inside window");
+        check(media.outcome(new IOException("offline"), 4, 180_000) == stop, "mixed errors cannot extend auth window");
+        var next = new CloudCallRetryPolicy.MediaRetry();
+        check(next.outcome(http(401), 4, 180_000) == reconnect, "next session gets independent window");
+        check(next.outcome(http(410), 2, 180_001) == stop,
                 "a ringing call keeps its slot, so a retried ring cannot push the iPhone again");
-        check(CloudCallRetryPolicy.mediaOutcome(http(401), -1) == release, "final rejection after the call is gone releases the slot");
-        check(CloudCallRetryPolicy.mediaOutcome(http(404), -1) == release, "404 after the call is gone releases the slot");
+        check(next.outcome(http(404), -1, 180_002) == release, "404 after the call is gone releases the slot");
 
         var p = new CloudCallRetryPolicy();
         check(p.shouldDrop("a", http(409), 0), "a final rejection drops the event at once");

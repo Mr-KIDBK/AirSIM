@@ -236,6 +236,7 @@ final class StandaloneCloudMediaManager implements Closeable {
 
     private final class CloudSession implements Runnable, Closeable {
         final Descriptor descriptor;
+        final CloudCallRetryPolicy.MediaRetry mediaRetry = new CloudCallRetryPolicy.MediaRetry();
         volatile boolean running = true;
         volatile StandaloneWebSocket webSocket;
         volatile Socket pcm;
@@ -260,6 +261,7 @@ final class StandaloneCloudMediaManager implements Closeable {
                         if (!running) { closeSocket(owner); return; }
                         webSocket = owner;
                     }
+                    mediaRetry.authenticated();
                     owner.writeText(status("agent_ready", ""));
                     BridgeLog.info("standalone_cloud_media_connected call_uuid="
                             + DebugRedactor.safeIdentifier(descriptor.callUUID));
@@ -271,7 +273,8 @@ final class StandaloneCloudMediaManager implements Closeable {
                         connected = false;
                         reconnectFailures = Math.min(4, reconnectFailures + 1);
                         BridgeLog.error("standalone_cloud_media_disconnected", error);
-                        var outcome = CloudCallRetryPolicy.mediaOutcome(error, CallRepository.state(descriptor.androidID));
+                        var outcome = mediaRetry.outcome(error, CallRepository.state(descriptor.androidID),
+                                android.os.SystemClock.elapsedRealtime());
                         if (outcome != CloudCallRetryPolicy.MediaOutcome.RECONNECT) {
                             // Relay no longer has this call (ended, expired or never stored),
                             // so every reconnect with this secret would be refused again.

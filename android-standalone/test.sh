@@ -44,7 +44,7 @@ assert_contains "$S" '" " + CloudCallRetryPolicy.describe(error)' \
 assert_contains "$S" 'BridgeLog.error("standalone_call_event_drop_failed", abandonError);' \
   'a failure while closing a dropped call must not escape to the event worker thread'
 M="$ROOT/../android/phone-control-app/src/com/airsim/phonecontrol/StandaloneCloudMediaManager.java"
-assert_contains "$M" 'CloudCallRetryPolicy.mediaOutcome(error, CallRepository.state(descriptor.androidID))' \
+assert_contains "$M" 'mediaRetry.outcome(error, CallRepository.state(descriptor.androidID),' \
   'a media session must stop once the Relay no longer has its call'
 assert_contains "$M" 'outcome == CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE && active == this' \
   'a live Telecom call keeps its slot after media give-up, so its retried ring cannot push the iPhone again'

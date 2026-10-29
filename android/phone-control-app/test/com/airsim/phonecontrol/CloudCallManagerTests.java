@@ -13,7 +13,50 @@ public final class CloudCallManagerTests {
         droppedEndedClosesOnlyOwner();
         pendingDialBindsOnlyUniqueNewMatchingCall();
         cachedDialCannotRecreateEndedSession();
+        media401RetriesThenStopsWithoutReplacingLiveSlot();
+        successfulHandshakeResetsMedia401Window();
         System.out.println("CloudCallManagerTests passed");
+    }
+
+    private static void media401RetriesThenStopsWithoutReplacingLiveSlot() throws Exception {
+        var call = new android.telecom.Call(4);
+        String id = CallRepository.add(call);
+        try (var f = new Fixture(id)) {
+            Object session = f.active();
+            StandaloneWebSocket.attempts = 0;
+            StandaloneWebSocket.next = () -> {
+                android.os.SystemClock.now = StandaloneWebSocket.attempts == 1 ? 0 : 60_000;
+                throw new RelayHTTPException(401, "call authentication failed");
+            };
+            ((Runnable) session).run();
+            check(StandaloneWebSocket.attempts == 2, "401 must retry, then stop at budget");
+            check(f.active() == session && !(boolean)field(session, "running"), "exhaustion must retain live slot but stop media");
+            f.manager.abandonCallEvent(event(id, "incoming", "ended").toString());
+            check(f.active() == null, "ended must release stopped session");
+        } finally { CallRepository.remove(call); StandaloneWebSocket.next = null; }
+    }
+
+    private static void successfulHandshakeResetsMedia401Window() throws Exception {
+        try (var f = new Fixture("owner")) {
+            Object session = f.active();
+            StandaloneWebSocket.attempts = 0;
+            var socket = new StandaloneWebSocket(() -> {
+                set(session, "running", false);
+                throw new java.io.IOException("test read complete");
+            });
+            StandaloneWebSocket.next = () -> {
+                if (StandaloneWebSocket.attempts == 1) {
+                    android.os.SystemClock.now = 0;
+                    throw new RelayHTTPException(401, "call authentication failed");
+                }
+                return socket;
+            };
+            ((Runnable)session).run();
+            check(StandaloneWebSocket.attempts == 2 && socket.closed, "temporary 401 must recover and clean socket");
+            var retry = (CloudCallRetryPolicy.MediaRetry)field(session, "mediaRetry");
+            check(retry.outcome(new RelayHTTPException(401, ""), 4, 120_000) == CloudCallRetryPolicy.MediaOutcome.RECONNECT,
+                    "real successful handshake must reset unauthorized history");
+        } finally { StandaloneWebSocket.next = null; }
     }
 
     private static void pendingDialBindsOnlyUniqueNewMatchingCall() throws Exception {
