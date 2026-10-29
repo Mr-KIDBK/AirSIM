@@ -39,4 +39,6 @@ Files: standalone README and test harness only as needed to restore baseline lif
 
 ## Review focus
 
+Final-review refinement: replace live-only pre-dial ID selection with a pre-dial creation observation. It retains removed calls until ownership binding so calls ending before event drain or session creation can release their own session. Capture only the first 15 seconds and at most 64 calls; ambiguous/overflow observations fail closed. Close observations on binding, failure, and session shutdown. The original task interfaces below are superseded by this refinement.
+
 Late old outgoing events before/after new dial; events arriving before session creation; duplicate command replay; ambiguous same-number calls; stopped session slot retention; 401 mixed with timeouts/5xx, successful handshake reset, stale session cleanup; lock ordering and no real network in tests.

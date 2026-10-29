@@ -6,6 +6,8 @@ import java.lang.reflect.*;
 /** Runs the actual manager without starting a socket, dial, or background executor. */
 public final class CloudCallManagerTests {
     public static void main(String[] args) throws Exception {
+        endedBeforeEventDrainStillReleasesOutgoing();
+        callCanCompleteBeforeSessionCreation();
         lateOutgoingCannotBindUnownedSession("ended");
         lateOutgoingCannotBindUnownedSession("active");
         otherCallCannotEndOwnedSession();
@@ -16,6 +18,39 @@ public final class CloudCallManagerTests {
         media401RetriesThenStopsWithoutReplacingLiveSlot();
         successfulHandshakeResetsMedia401Window();
         System.out.println("CloudCallManagerTests passed");
+    }
+
+    private static void callCanCompleteBeforeSessionCreation() throws Exception {
+        var observation = CallRepository.observeOutgoing("5550100");
+        var call = new android.telecom.Call(1, 1, "5550100");
+        String id = CallRepository.add(call);
+        CallRepository.remove(call);
+        try (var f = new Fixture("")) {
+            set(f.manager, "sessions", new QueuedExecutor());
+            var descriptor = new JSONObject().put("call_id", "early-call")
+                    .put("call_uuid", "22222222-2222-4222-8222-222222222222")
+                    .put("call_secret", "synthetic-secret").put("relay_url", "https://example.invalid");
+            f.manager.startOutgoing(descriptor, observation);
+            f.manager.handleCallEvent(registration(), event("previous-call", "outgoing", "ended"), f.relay);
+            check(f.active() != null && f.relay.states.isEmpty(), "old event cannot end early-completed owner");
+            f.manager.handleCallEvent(registration(), event(id, "outgoing", "ended"), f.relay);
+            check(f.active() == null && f.relay.states.size() == 1, "call completed before session creation must still release");
+            check("early-call".equals(f.relay.states.get(0).optString("call_id")), "notify correct early-call identity");
+        } finally { observation.close(); }
+    }
+
+    private static void endedBeforeEventDrainStillReleasesOutgoing() throws Exception {
+        try (var f = new Fixture("")) {
+            set(f.descriptor, "outgoingObservation", CallRepository.observeOutgoing("5550100"));
+            var call = new android.telecom.Call(1, 1, "5550100");
+            String id = CallRepository.add(call);
+            call.setStateForTest(android.telecom.Call.STATE_DISCONNECTED);
+            CallRepository.remove(call);
+            f.manager.handleCallEvent(registration(), event(id, "outgoing", "dialing"), f.relay);
+            f.manager.handleCallEvent(registration(), event(id, "outgoing", "ended"), f.relay);
+            check(f.relay.states.size() == 2 && f.active() == null,
+                    "outgoing that ended before queue drain must still notify and release its own cloud session");
+        }
     }
 
     private static void media401RetriesThenStopsWithoutReplacingLiveSlot() throws Exception {
@@ -62,19 +97,13 @@ public final class CloudCallManagerTests {
     private static void pendingDialBindsOnlyUniqueNewMatchingCall() throws Exception {
         var old = new android.telecom.Call(4, 1, "5550100");
         String oldID = CallRepository.add(old);
-        var before = CallRepository.callIDs();
+        var observation = CallRepository.observeOutgoing("5550100");
         var other = new android.telecom.Call(1, 1, "5550199");
         String otherID = CallRepository.add(other);
         var created = new android.telecom.Call(1, 1, "5550100");
         String createdID = CallRepository.add(created);
-        var ambiguous = new android.telecom.Call(1, 1, "5550100");
-        CallRepository.add(ambiguous);
         try (var f = new Fixture("")) {
-            set(f.descriptor, "callsBeforeDial", before);
-            set(f.descriptor, "dialedNumber", "5550100");
-            f.manager.handleCallEvent(registration(), event(createdID, "outgoing", "dialing"), f.relay);
-            check(f.boundID().isEmpty() && f.relay.states.isEmpty(), "ambiguous calls must not bind");
-            CallRepository.remove(ambiguous);
+            set(f.descriptor, "outgoingObservation", observation);
             f.manager.handleCallEvent(registration(), event(oldID, "outgoing", "ended"), f.relay);
             check(createdID.equals(f.boundID()) && f.relay.states.isEmpty(), "bind only newly created matching call, ignore old end");
             f.manager.handleCallEvent(registration(), event(otherID, "outgoing", "active"), f.relay);
@@ -85,7 +114,7 @@ public final class CloudCallManagerTests {
             f.manager.handleCallEvent(registration(), event(createdID, "outgoing", "ended"), f.relay);
             check(f.active() == null, "bound call must close even after Telecom removes it");
         } finally {
-            CallRepository.remove(old); CallRepository.remove(other); CallRepository.remove(created); CallRepository.remove(ambiguous);
+            observation.close(); CallRepository.remove(old); CallRepository.remove(other); CallRepository.remove(created);
         }
     }
 

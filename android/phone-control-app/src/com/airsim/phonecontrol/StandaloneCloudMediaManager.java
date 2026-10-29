@@ -42,25 +42,33 @@ final class StandaloneCloudMediaManager implements Closeable {
         this.context = context.getApplicationContext();
     }
 
-    void startOutgoing(JSONObject call, java.util.Set<String> callsBeforeDial, String dialedNumber) {
-        if (call == null) return;
+    void startOutgoing(JSONObject call, CallRepository.OutgoingCallObservation observation) {
+        boolean started = false;
         try {
+            if (call == null) return;
             Descriptor descriptor = Descriptor.from(call);
-            descriptor.callsBeforeDial = java.util.Set.copyOf(callsBeforeDial);
-            descriptor.dialedNumber = dialedNumber;
+            descriptor.outgoingObservation = observation;
             bindOutgoing(descriptor);
             start(descriptor);
+            started = true;
         }
         catch (Exception error) { BridgeLog.error("standalone_outgoing_media_invalid", error); }
+        finally { if (!started && observation != null) observation.close(); }
     }
 
     private void bindOutgoing(Descriptor descriptor) {
-        if (!descriptor.androidID.isEmpty() || !"outgoing".equals(descriptor.direction)
-                || descriptor.dialedNumber.isBlank()) return;
-        // Only a unique live Telecom call created by this dial can claim the descriptor.
-        // Queue order/direction alone is not proof: an old ended/active may arrive first.
-        String candidate = CallRepository.newOutgoingCallSince(descriptor.callsBeforeDial, descriptor.dialedNumber);
-        if (!candidate.isEmpty()) descriptor.androidID = candidate;
+        synchronized (descriptor) {
+            if (!descriptor.androidID.isEmpty() || !"outgoing".equals(descriptor.direction)
+                    || descriptor.outgoingObservation == null) return;
+            // Creation is observed before dialing and survives Telecom removal. A delayed
+            // terminal event can still clean up its own call, never an arbitrary old event.
+            String candidate = descriptor.outgoingObservation.matchingCallID();
+            if (!candidate.isEmpty()) {
+                descriptor.androidID = candidate;
+                descriptor.outgoingObservation.close();
+                descriptor.outgoingObservation = null;
+            }
+        }
     }
 
     String androidCallIDFor(JSONObject call) {
@@ -68,6 +76,7 @@ final class StandaloneCloudMediaManager implements Closeable {
         synchronized (lock) {
             if (active == null) return "";
             Descriptor descriptor = active.descriptor;
+            bindOutgoing(descriptor);
             return new CloudCallTarget(descriptor.callID, descriptor.callUUID,
                     descriptor.generation, descriptor.androidID).resolve(
                     call.optString("call_id"), call.optString("call_uuid"),
@@ -435,6 +444,9 @@ final class StandaloneCloudMediaManager implements Closeable {
         @Override public synchronized void close() {
             running = false;
             mediaStarted = false;
+            synchronized (descriptor) {
+                if (descriptor.outgoingObservation != null) descriptor.outgoingObservation.close();
+            }
             RemoteAudioSessionRegistry.setCloud(pcm, false, "");
             closeSocket(webSocket);
             closeSocket(mediaPump);
@@ -449,8 +461,7 @@ final class StandaloneCloudMediaManager implements Closeable {
         final String secret;
         final String relayURL;
         final String direction;
-        java.util.Set<String> callsBeforeDial = java.util.Set.of();
-        String dialedNumber = "";
+        CallRepository.OutgoingCallObservation outgoingObservation;
         volatile String androidID;
 
         Descriptor(String callID, String callUUID, long generation, String secret,

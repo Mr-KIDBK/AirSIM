@@ -18,7 +18,10 @@ test "$(shasum -a 256 "$JSON_JAR" | awk '{print $1}')" = 3cf6cd6892e32e2b4c1c39e
   "$ROOT"/test/cloud-call/android/app/role/RoleManager.java \
   "$ROOT"/test/cloud-call/android/os/SystemClock.java \
   "$ROOT"/src/com/airsim/phonecontrol/StandaloneCloudMediaManager.java \
+  "$ROOT"/src/com/airsim/phonecontrol/CallRepository.java \
   "$ROOT"/src/com/airsim/phonecontrol/StandaloneAgentGateway.java \
   "$ROOT"/src/com/airsim/phonecontrol/CloudCallRetryPolicy.java \
-  "$ROOT"/test/com/airsim/phonecontrol/CloudCallManagerTests.java
+  "$ROOT"/test/com/airsim/phonecontrol/CloudCallManagerTests.java \
+  "$ROOT"/test/com/airsim/phonecontrol/CloudOutgoingObservationTests.java
 "$TASK_JAVA_HOME/bin/java" -cp "$OUT:$JSON_JAR:$BASE:$BUILT:$ANDROID_JAR" com.airsim.phonecontrol.CloudCallManagerTests
+"$TASK_JAVA_HOME/bin/java" -cp "$OUT:$JSON_JAR:$BASE:$BUILT:$ANDROID_JAR" com.airsim.phonecontrol.CloudOutgoingObservationTests
