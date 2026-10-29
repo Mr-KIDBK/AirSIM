@@ -333,7 +333,13 @@ public final class StandaloneAgentService extends Service {
                         // including the "ended" that closes the cloud call, behind it.
                         CALL_EVENTS.poll();
                         BridgeLog.info("standalone_call_event_dropped " + CloudCallRetryPolicy.describe(error));
-                        StandaloneCloudMediaManager.get(this).abandonCallEvent(encoded);
+                        try {
+                            StandaloneCloudMediaManager.get(this).abandonCallEvent(encoded);
+                        } catch (RuntimeException abandonError) {
+                            // The event is already out of the queue; escaping here would end the
+                            // single event-worker thread and crash the process.
+                            BridgeLog.error("standalone_call_event_drop_failed", abandonError);
+                        }
                         continue;
                     }
                     BridgeLog.info("standalone_call_event_retry failures=" + (attempt + 1)

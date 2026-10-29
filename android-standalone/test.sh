@@ -41,6 +41,8 @@ assert_contains "$S" 'StandaloneCloudMediaManager.get(this).abandonCallEvent(enc
   'a dropped "ended" must still close its cloud call'
 assert_contains "$S" '" " + CloudCallRetryPolicy.describe(error)' \
   'call event retries must log the Relay status'
+assert_contains "$S" 'BridgeLog.error("standalone_call_event_drop_failed", abandonError);' \
+  'a failure while closing a dropped call must not escape to the event worker thread'
 M="$ROOT/../android/phone-control-app/src/com/airsim/phonecontrol/StandaloneCloudMediaManager.java"
 assert_contains "$M" 'CloudCallRetryPolicy.mediaOutcome(error, CallRepository.state(descriptor.androidID))' \
   'a media session must stop once the Relay no longer has its call'
