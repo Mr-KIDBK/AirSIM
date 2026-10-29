@@ -102,6 +102,12 @@ final class StandaloneCloudMediaManager implements Closeable {
                 }
             }
         }
+        if (descriptor != null && !CloudCallTarget.owns(descriptor.androidID, androidID)) {
+            // Call waiting, or a late event of an earlier call: it must not rewrite or end
+            // the lifecycle of the call this session owns.
+            BridgeLog.info("standalone_call_event_other_call state=" + state);
+            return;
+        }
         if (descriptor != null) {
             String phase = phase(state);
             if (!phase.isEmpty()) {
@@ -196,7 +202,7 @@ final class StandaloneCloudMediaManager implements Closeable {
         if (!"ended".equals(event.optString("state", ""))) return;
         String androidID = event.optString("call_id", "");
         synchronized (lock) {
-            if (active != null && !androidID.isEmpty() && androidID.equals(active.descriptor.androidID)) {
+            if (active != null && CloudCallTarget.owns(active.descriptor.androidID, androidID)) {
                 active.close();
                 active = null;
                 BridgeLog.info("standalone_cloud_call_closed_unconfirmed");

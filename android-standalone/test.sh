@@ -46,8 +46,10 @@ assert_contains "$M" 'if (CloudCallRetryPolicy.mediaRejected(error))' \
   'a media session must stop once the Relay no longer has its call'
 assert_contains "$M" 'void abandonCallEvent(String encoded)' \
   'media manager must close a call whose "ended" was dropped'
-assert_contains "$M" '!androidID.isEmpty() && androidID.equals(active.descriptor.androidID)' \
+assert_contains "$M" 'active != null && CloudCallTarget.owns(active.descriptor.androidID, androidID)' \
   'a dropped "ended" may only close the cloud call of the same Android call'
+assert_contains "$M" 'if (descriptor != null && !CloudCallTarget.owns(descriptor.androidID, androidID))' \
+  'only the cloud call'"'"'s own Telecom events may drive it (call waiting, late events of an earlier call)'
 assert_contains "$M" 'try { event = new JSONObject(encoded); } catch (Exception ignored) { return; }' \
   'an unparsable dropped event must not escape the event worker'
 
