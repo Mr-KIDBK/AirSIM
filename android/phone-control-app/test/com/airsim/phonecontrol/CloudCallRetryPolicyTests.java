@@ -51,6 +51,8 @@ public final class CloudCallRetryPolicyTests {
         check(next.outcome(http(401), 4, 180_000) == reconnect, "next session gets independent window");
         check(next.outcome(http(410), 2, 180_001) == stop,
                 "a ringing call keeps its slot, so a retried ring cannot push the iPhone again");
+        // 0 is STATE_NEW: a call Telecom has created but not started dialing is still live.
+        check(next.outcome(http(404), 0, 180_002) == stop, "a call that has not dialed yet keeps its slot");
         check(next.outcome(http(404), -1, 180_002) == release, "404 after the call is gone releases the slot");
 
         var p = new CloudCallRetryPolicy();

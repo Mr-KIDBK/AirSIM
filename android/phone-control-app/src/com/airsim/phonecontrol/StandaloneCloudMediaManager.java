@@ -226,10 +226,11 @@ final class StandaloneCloudMediaManager implements Closeable {
         String androidID = event.optString("call_id", "");
         synchronized (lock) {
             if (active != null && CloudCallTarget.owns(active.descriptor.androidID, androidID)) {
-                BridgeLog.info("standalone_cloud_call_closed_unconfirmed call_uuid="
-                        + DebugRedactor.safeIdentifier(active.descriptor.callUUID));
+                String callUUID = active.descriptor.callUUID;
                 active.close();
                 active = null;
+                BridgeLog.info("standalone_cloud_call_closed_unconfirmed call_uuid="
+                        + DebugRedactor.safeIdentifier(callUUID));
             }
         }
     }
