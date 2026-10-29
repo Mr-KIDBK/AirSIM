@@ -71,7 +71,7 @@ adb shell dumpsys activity service com.airsim.phonecontrol.standalone/com.airsim
 - 云端会话只接受它自己那通 Android 电话的事件。呼叫等待中的第二通电话、或上一通电话迟到的事件，只记日志，不提交给 Relay，也不会结束当前通话。
 - 云端媒体会话重连时，Relay 用 4xx（408、429 除外，含 401、410）拒绝握手，说明这通电话已不在 Relay 上，停止重连。这通 Android 电话还在时保留会话位置，避免重试中的来电再次推送 iPhone；电话结束后释放。
 
-日志事件：`standalone_call_event_retry`、`standalone_call_event_dropped`、`standalone_call_event_other_call`、`standalone_cloud_call_closed_unconfirmed`、`standalone_cloud_media_abandoned`。重试、丢弃和放弃带异常类型、HTTP 状态和 Relay 返回的原因（只保留字母，不含号码等数字）；本地关闭和放弃还带 `call_uuid`，便于对上是哪一通云端通话。
+日志事件：`standalone_call_event_retry`、`standalone_call_event_dropped`、`standalone_call_event_drop_failed`、`standalone_call_event_other_call`、`standalone_cloud_call_closed_unconfirmed`、`standalone_cloud_media_abandoned`。重试、丢弃和放弃带异常类型、HTTP 状态和 Relay 返回的原因（只保留字母，不含号码等数字）；本地关闭和放弃还带 `call_uuid`，便于对上是哪一通云端通话。关闭被丢弃事件对应的通话时出错，只记 `standalone_call_event_drop_failed`，队列照常继续。
 
 ## 运行架构
 
