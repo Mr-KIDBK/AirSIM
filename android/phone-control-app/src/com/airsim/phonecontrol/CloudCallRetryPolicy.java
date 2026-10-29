@@ -6,8 +6,8 @@ import java.util.regex.Pattern;
 
 /**
  * Bounds how long a cloud call event or media session keeps retrying the Relay. A 4xx other than
- * 408/429 answers the same request the same way every time (call ended or expired, illegal
- * lifecycle transition), so it is final at once. Anything else may clear up, but one event must
+ * 401/408/429 is final at once (call ended or expired, illegal lifecycle transition).
+ * Media 401 gets a bounded propagation window. Other failures may clear up, but one event must
  * not hold the in-memory FIFO, and the "ended" queued behind it, for more than a minute.
  */
 final class CloudCallRetryPolicy {

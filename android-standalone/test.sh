@@ -86,6 +86,7 @@ assert_not_contains "$MANIFEST" 'AgentWatchdogService' \
 "$ROOT/../android/phone-audio-bridge/build.sh"
 
 "$ROOT/build.sh" >/dev/null
+sh "$ROOT/../android/phone-control-app/test-cloud-call.sh"
 sh "$ROOT/../android/phone-control-app/test-gateway-lifecycle.sh"
 sh "$ROOT/../android/phone-control-app/test-owned-dial.sh"
 APK="$ROOT/build/android/AirSIM-Android-Standalone-debug.apk"
