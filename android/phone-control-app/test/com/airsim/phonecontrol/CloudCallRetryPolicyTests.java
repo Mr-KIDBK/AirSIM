@@ -30,6 +30,19 @@ public final class CloudCallRetryPolicyTests {
         }
         check(!CloudCallRetryPolicy.mediaRejected(new IOException("reset")), "media network failure is retryable");
         check(!CloudCallRetryPolicy.mediaRejected(null), "missing media error is retryable");
+        var reconnect = CloudCallRetryPolicy.MediaOutcome.RECONNECT;
+        var stop = CloudCallRetryPolicy.MediaOutcome.STOP;
+        var release = CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE;
+        // Telecom states as Android numbers them: 2 ringing, 4 active; -1 means the call is gone.
+        check(CloudCallRetryPolicy.mediaOutcome(new IOException("reset"), 4) == reconnect, "network failure reconnects");
+        check(CloudCallRetryPolicy.mediaOutcome(http(500), -1) == reconnect, "5xx reconnects even after the call is gone");
+        check(CloudCallRetryPolicy.mediaOutcome(http(429), -1) == reconnect, "429 reconnects");
+        check(CloudCallRetryPolicy.mediaOutcome(null, -1) == reconnect, "missing error reconnects");
+        check(CloudCallRetryPolicy.mediaOutcome(http(401), 4) == stop, "final rejection of a live call stops but keeps the slot");
+        check(CloudCallRetryPolicy.mediaOutcome(http(410), 2) == stop,
+                "a ringing call keeps its slot, so a retried ring cannot push the iPhone again");
+        check(CloudCallRetryPolicy.mediaOutcome(http(401), -1) == release, "final rejection after the call is gone releases the slot");
+        check(CloudCallRetryPolicy.mediaOutcome(http(404), -1) == release, "404 after the call is gone releases the slot");
 
         var p = new CloudCallRetryPolicy();
         check(p.shouldDrop("a", http(409), 0), "a final rejection drops the event at once");

@@ -42,9 +42,9 @@ assert_contains "$S" 'StandaloneCloudMediaManager.get(this).abandonCallEvent(enc
 assert_contains "$S" '" " + CloudCallRetryPolicy.describe(error)' \
   'call event retries must log the Relay status'
 M="$ROOT/../android/phone-control-app/src/com/airsim/phonecontrol/StandaloneCloudMediaManager.java"
-assert_contains "$M" 'if (CloudCallRetryPolicy.mediaRejected(error))' \
+assert_contains "$M" 'CloudCallRetryPolicy.mediaOutcome(error, CallRepository.state(descriptor.androidID))' \
   'a media session must stop once the Relay no longer has its call'
-assert_contains "$M" 'if (active == this && CallRepository.state(descriptor.androidID) < 0) active = null;' \
+assert_contains "$M" 'outcome == CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE && active == this' \
   'a live Telecom call keeps its slot after media give-up, so its retried ring cannot push the iPhone again'
 assert_contains "$M" 'void abandonCallEvent(String encoded)' \
   'media manager must close a call whose "ended" was dropped'

@@ -256,13 +256,14 @@ final class StandaloneCloudMediaManager implements Closeable {
                         connected = false;
                         reconnectFailures = Math.min(4, reconnectFailures + 1);
                         BridgeLog.error("standalone_cloud_media_disconnected", error);
-                        if (CloudCallRetryPolicy.mediaRejected(error)) {
+                        var outcome = CloudCallRetryPolicy.mediaOutcome(error, CallRepository.state(descriptor.androidID));
+                        if (outcome != CloudCallRetryPolicy.MediaOutcome.RECONNECT) {
                             // Relay no longer has this call (ended, expired or never stored),
-                            // so every reconnect with this secret would be refused again. While
-                            // its Telecom call lives, keep the slot: a retried ring of that call
-                            // must not build a new descriptor and push the iPhone again.
+                            // so every reconnect with this secret would be refused again.
                             BridgeLog.info("standalone_cloud_media_abandoned " + CloudCallRetryPolicy.describe(error));
-                            synchronized (lock) { if (active == this && CallRepository.state(descriptor.androidID) < 0) active = null; }
+                            synchronized (lock) {
+                                if (outcome == CloudCallRetryPolicy.MediaOutcome.STOP_AND_RELEASE && active == this) active = null;
+                            }
                             close();
                         }
                     }

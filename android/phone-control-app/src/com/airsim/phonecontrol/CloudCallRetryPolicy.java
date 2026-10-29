@@ -35,6 +35,18 @@ final class CloudCallRetryPolicy {
         return error instanceof RelayHTTPException http && finalStatus(http.statusCode());
     }
 
+    enum MediaOutcome { RECONNECT, STOP, STOP_AND_RELEASE }
+
+    /**
+     * What a cloud media session does after a failed connect. A final rejection stops it; its slot
+     * is released only once the Telecom call is gone ({@code telecomState < 0}), because while the
+     * call lives a retried ring of it must find this session instead of pushing the iPhone again.
+     */
+    static MediaOutcome mediaOutcome(Throwable error, int telecomState) {
+        if (!mediaRejected(error)) return MediaOutcome.RECONNECT;
+        return telecomState < 0 ? MediaOutcome.STOP_AND_RELEASE : MediaOutcome.STOP;
+    }
+
     /** Log-safe: exception type, HTTP status and the Relay's short reason, never the body itself. */
     static String describe(Throwable error) {
         if (error == null) return "type=unknown";
