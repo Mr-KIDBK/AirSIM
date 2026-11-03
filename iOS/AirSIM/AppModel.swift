@@ -1229,7 +1229,7 @@ final class AppModel: ObservableObject {
                               e2e: E2EPairingKeyChange? = nil) async throws {
         guard let encoded = registration.vowlanSecret else { throw VoWLANAuthError.invalidSecret }
         let credential = try VoWLANCredential(encodedSecret: encoded, clockOffset: clockOffset)
-        localDevices.stagePairing(agentID: agentID, credential: credential, e2e: e2e)
+        localDevices.stagePairing(agentID: agentID, credential: credential)
         if let endpoint, endpoint.usesTLS {
             // The claim authenticates the device/key and its internal ports,
             // not the user's external TLS mapping. Keep the key for retry, but
