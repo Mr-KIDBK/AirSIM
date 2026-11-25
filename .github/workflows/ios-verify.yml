@@ -1,0 +1,72 @@
+# Fork-only verification for iOS work on kai-wu-cortex/AirSIM. Never part of an upstream PR:
+# .superpowers/tools/ios-ci.sh adds it on top of the commit under test and force-pushes a ci/ branch.
+name: ios-verify
+on:
+  push:
+    branches: ['ci/**']
+concurrency:
+  group: ios-verify-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  ios:
+    # The app calls an iOS 27 API (AudioSessionController), so only the Xcode 27 image can build it.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for testing
+        run: |
+          set +e
+          xcodebuild -project iOS/AirSIM.xcodeproj -scheme AirSIM \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO build-for-testing > build.log 2>&1
+          status=$?
+          grep -E ': error: |\*\* BUILD' build.log | sort -u | head -n 150
+          tail -n 25 build.log
+          exit $status
+      - name: Embedded extensions
+        run: ls -la build/dd/Build/Products/Debug-iphonesimulator/AirSIM.app/PlugIns
+      - name: Test
+        run: |
+          set +e
+          ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          best = None
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not match:
+                  continue
+              version = (int(match.group(1)), int(match.group(2)))
+              for device in devices:
+                  if device.get("isAvailable") and device["name"].startswith("iPhone"):
+                      if best is None or version > best[0]:
+                          best = (version, device["udid"], device["name"])
+          print(best, file=sys.stderr)
+          print(best[1] if best else "")
+          ')
+          test -n "$ID" || { echo "no available iPhone simulator"; exit 1; }
+          # Fails on upstream 13f0c41 too: the simulator has no paired Apple Watch (WCErrorCodeDeviceNotPaired).
+          xcodebuild test-without-building -project iOS/AirSIM.xcodeproj -scheme AirSIM \
+            -derivedDataPath build/dd -destination "platform=iOS Simulator,id=$ID" \
+            -only-testing:AirSIMTests \
+            -skip-testing:AirSIMTests/LocalDeviceDirectoryTests/testWatchDialOwnsSourceAndBlocksSecondPhoneDial \
+            > test.log 2>&1
+          status=$?
+          grep -E ': error: |failed \(' test.log | head -n 150
+          grep -E 'Executed [0-9]+ test' test.log | tail -n 1
+          tail -n 15 test.log
+          exit $status
+      - name: Keep logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-logs
+          path: |
+            build.log
+            test.log
+          if-no-files-found: ignore
+          retention-days: 7
